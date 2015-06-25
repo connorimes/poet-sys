@@ -21,8 +21,8 @@ extern {
     fn poet_init(heart: *mut c_void,
                  perf_goal: c_double,
                  num_system_states: c_uint,
-                 control_states: *mut c_void,
-                 apply_states: *mut c_void,
+                 control_states: *mut POETControlState,
+                 apply_states: *mut POETCpuState,
                  apply_func: POETApplyFn,
                  curr_state_func: POETCurrentStateFn,
                  buffer_depth: c_uint,
@@ -41,13 +41,13 @@ extern {
                         id: c_uint,
                         last_id: c_uint);
     
-    fn get_control_states(path: *const c_char,
-                          states: *mut *mut c_void,
-                          num_states: *mut c_uint) -> c_int;
+    pub fn get_control_states(path: *const c_char,
+                              states: *mut *mut POETControlState,
+                              num_states: *mut c_uint) -> c_int;
 
-    fn get_cpu_states(path: *const c_char,
-                      states: *mut *mut c_void,
-                      num_states: *mut c_uint) -> c_int;
+    pub fn get_cpu_states(path: *const c_char,
+                          states: *mut *mut POETCpuState,
+                          num_states: *mut c_uint) -> c_int;
 
     fn get_current_cpu_state(states: *const c_void,
                              num_states: c_uint,
@@ -55,18 +55,17 @@ extern {
 
 }
 
-pub struct POETStates {
-    pub control_states: *mut c_void,
-    pub cpu_states: *mut c_void,
-    pub num_states: u32,
+#[repr(C)]
+pub struct POETControlState {
+    pub id: c_uint,
+    pub speedup: c_double,
+    pub cost: c_double,
 }
 
-impl POETStates  {
-    pub fn new() -> Result<POETStates, String> {
+impl POETControlState {
+    pub fn new() -> Result<(*mut POETControlState, u32), String> {
         let mut control_states = ptr::null_mut();
-        let mut cpu_states = ptr::null_mut();
         let mut num_ctl_states : u32 = 0;
-        let mut num_cpu_states : u32 = 0;
         let res = unsafe {
             get_control_states(ptr::null(),
                                &mut control_states,
@@ -75,39 +74,30 @@ impl POETStates  {
         if res != 0 {
             return Err("Failed to load control states".to_string());
         }
+        Ok((control_states, num_ctl_states))
+    }
+}
+
+#[repr(C)]
+pub struct POETCpuState {
+    id: c_uint,
+    freq: c_uint,
+    cores: c_uint,
+}
+
+impl POETCpuState {
+    pub fn new() -> Result<(*mut POETCpuState, u32), String> {
+        let mut cpu_states = ptr::null_mut();
+        let mut num_cpu_states : u32 = 0;
         let res = unsafe {
             get_cpu_states(ptr::null(),
                            &mut cpu_states,
                            &mut num_cpu_states)
         };
         if res != 0 {
-            unsafe {
-                libc::free(control_states);
-            }
             return Err("Failed to load cpu states".to_string());
         }
-        if num_ctl_states != num_cpu_states {
-            unsafe {
-                libc::free(control_states);
-                libc::free(cpu_states);
-            }
-            return Err("Number of control and cpu states don't match".to_string());
-        }
-        return Ok(POETStates {
-                    control_states: control_states,
-                    cpu_states: cpu_states,
-                    num_states: num_ctl_states,
-                });
-    }
-}
-
-impl Drop for POETStates {
-    fn drop(&mut self) {
-        unsafe {
-            libc::free(self.control_states);
-            libc::free(self.cpu_states);
-        }
-        println!("Cleaned up POET states");
+        Ok((cpu_states, num_cpu_states))
     }
 }
 
@@ -118,7 +108,9 @@ pub struct POET {
 impl POET {
     pub fn new(hb: &mut Heartbeat,
                perf_goal: f64,
-               poet_states: &mut POETStates,
+               control_states: *mut POETControlState,
+               cpu_states: *mut POETCpuState,
+               num_states: u32,
                apply_func: Option<POETApplyFn>,
                curr_state_func: Option<POETCurrentStateFn>,
                buffer_depth: u32,
@@ -133,7 +125,7 @@ impl POET {
         };
         let poet = unsafe {
             poet_init(hb.hb, perf_goal,
-                      poet_states.num_states, poet_states.control_states, poet_states.cpu_states,
+                      num_states, control_states, cpu_states,
                       apply_func, curr_state_func,
                       buffer_depth,
                       CString::new(log_filename).unwrap().as_ptr())
@@ -160,3 +152,22 @@ impl Drop for POET {
     }
 }
 
+#[test]
+fn test_basic() {
+    let mut hb = Heartbeat::new(None, 20, 20, "heartbeat.log", None).unwrap();
+    let (control_states, num_ctl_states): (*mut POETControlState, u32) = POETControlState::new().ok().expect("Failed to load control states");
+    let (cpu_states, num_cpu_states): (*mut POETCpuState, u32) = POETCpuState::new().ok().expect("Failed to load cpu states");
+    if num_ctl_states != num_cpu_states {
+        panic!("Number of control and cpu states don't match");
+    }
+    let mut poet = POET::new(&mut hb, 100.0,
+                             control_states, cpu_states, num_ctl_states,
+                             None, None,
+                             20u32, "poet.log").ok().expect("Failed to initialize POET");
+    hb.heartbeat(0, 1, 0.0, None);
+    poet.apply_control();
+    unsafe {
+        libc::free(control_states as *mut c_void);
+        libc::free(cpu_states as *mut c_void);
+    }
+}
