@@ -5,6 +5,3 @@ authors = ["Connor Imes <cimes@mozilla.com>"]
 
 [dependencies]
 libc = "0.1"
-
-[dependencies.heartbeats_sys]
-git = "https://github.com/connorimes/heartbeats_sys.git"

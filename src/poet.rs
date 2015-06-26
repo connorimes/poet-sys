@@ -1,7 +1,6 @@
 use libc::{c_void, c_char, c_int, c_uint, c_double};
 use std::ffi::CString;
 use std::ptr;
-use heartbeats_sys::heartbeat::Heartbeat;
 
 pub type POETApplyFn = unsafe extern fn(states: *mut c_void,
                                         num_states: c_uint,
@@ -18,17 +17,20 @@ extern {
      * Core functions - poet.h
      */
 
-    fn poet_init(heart: *mut c_void,
-                 perf_goal: c_double,
+    fn poet_init(perf_goal: c_double,
                  num_system_states: c_uint,
                  control_states: *mut POETControlState,
                  apply_states: *mut POETCpuState,
                  apply_func: POETApplyFn,
                  curr_state_func: POETCurrentStateFn,
+                 period: c_uint,
                  buffer_depth: c_uint,
                  log_filename: *const c_char) -> *mut c_void;
 
-    fn poet_apply_control(state: *mut c_void);
+    fn poet_apply_control(state: *mut c_void,
+                          id: u64,
+                          perf: c_double,
+                          pwr: c_double);
 
     fn poet_destroy(state: *mut c_void);
 
@@ -106,13 +108,13 @@ pub struct POET {
 }
 
 impl POET {
-    pub fn new(hb: &mut Heartbeat,
-               perf_goal: f64,
+    pub fn new(perf_goal: f64,
                control_states: *mut POETControlState,
                cpu_states: *mut POETCpuState,
                num_states: u32,
                apply_func: Option<POETApplyFn>,
                curr_state_func: Option<POETCurrentStateFn>,
+               period: u32,
                buffer_depth: u32,
                log_filename: &str) -> Result<POET, String> {
         let apply_func = match apply_func {
@@ -124,10 +126,10 @@ impl POET {
             None => get_current_cpu_state,
         };
         let poet = unsafe {
-            poet_init(hb.hb, perf_goal,
+            poet_init(perf_goal,
                       num_states, control_states, cpu_states,
                       apply_func, curr_state_func,
-                      buffer_depth,
+                      period, buffer_depth,
                       CString::new(log_filename).unwrap().as_ptr())
         };
         if poet.is_null() {
@@ -136,9 +138,9 @@ impl POET {
         Ok(POET { poet: poet, })
     }
 
-    pub fn apply_control(&mut self) {
+    pub fn apply_control(&mut self, tag: u64, window_rate: f64, window_power: f64) {
         unsafe {
-            poet_apply_control(self.poet);
+            poet_apply_control(self.poet, tag, window_rate, window_power);
         }
     }
 }
@@ -156,23 +158,19 @@ impl Drop for POET {
 mod test {
     use super::*;
     use libc::{self, c_void};
-    use heartbeats_sys::heartbeat::Heartbeat;
-
 
     #[test]
     fn test_basic() {
-        let mut hb = Heartbeat::new(None, 20, 20, "heartbeat.log", None).unwrap();
         let (control_states, num_ctl_states): (*mut POETControlState, u32) = POETControlState::new().ok().expect("Failed to load control states");
         let (cpu_states, num_cpu_states): (*mut POETCpuState, u32) = POETCpuState::new().ok().expect("Failed to load cpu states");
         if num_ctl_states != num_cpu_states {
             panic!("Number of control and cpu states don't match");
         }
-        let mut poet = POET::new(&mut hb, 100.0,
+        let mut poet = POET::new(100.0,
                                  control_states, cpu_states, num_ctl_states,
                                  None, None,
-                                 20u32, "poet.log").ok().expect("Failed to initialize POET");
-        hb.heartbeat(0, 1, 0.0, None);
-        poet.apply_control();
+                                 20u32, 1u32, "poet.log").ok().expect("Failed to initialize POET");
+        poet.apply_control(0, 1.0, 1.0);
         unsafe {
             libc::free(control_states as *mut c_void);
             libc::free(cpu_states as *mut c_void);
