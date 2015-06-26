@@ -116,7 +116,7 @@ impl POET {
                curr_state_func: Option<POETCurrentStateFn>,
                period: u32,
                buffer_depth: u32,
-               log_filename: &str) -> Result<POET, String> {
+               log_filename: Option<&str>) -> Result<POET, String> {
         let apply_func = match apply_func {
             Some(p) => p,
             None => apply_cpu_config,
@@ -125,12 +125,15 @@ impl POET {
             Some(p) => p,
             None => get_current_cpu_state,
         };
+        let log_filename = match log_filename {
+            Some(l) => CString::new(l).unwrap().as_ptr(),
+            None => ptr::null(),
+        };
         let poet = unsafe {
             poet_init(perf_goal,
                       num_states, control_states, cpu_states,
                       apply_func, curr_state_func,
-                      period, buffer_depth,
-                      CString::new(log_filename).unwrap().as_ptr())
+                      period, buffer_depth, log_filename)
         };
         if poet.is_null() {
             return Err("Failed to instantiate POET object".to_string());
@@ -169,7 +172,7 @@ mod test {
         let mut poet = POET::new(100.0,
                                  control_states, cpu_states, num_ctl_states,
                                  None, None,
-                                 20u32, 1u32, "poet.log").ok().expect("Failed to initialize POET");
+                                 20u32, 1u32, None).unwrap();
         poet.apply_control(0, 1.0, 1.0);
         unsafe {
             libc::free(control_states as *mut c_void);
