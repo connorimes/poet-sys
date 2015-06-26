@@ -1,4 +1,4 @@
-use libc::{self, c_void, c_char, c_int, c_uint, c_double};
+use libc::{c_void, c_char, c_int, c_uint, c_double};
 use std::ffi::CString;
 use std::ptr;
 use heartbeats_sys::heartbeat::Heartbeat;
@@ -152,22 +152,31 @@ impl Drop for POET {
     }
 }
 
-#[test]
-fn test_basic() {
-    let mut hb = Heartbeat::new(None, 20, 20, "heartbeat.log", None).unwrap();
-    let (control_states, num_ctl_states): (*mut POETControlState, u32) = POETControlState::new().ok().expect("Failed to load control states");
-    let (cpu_states, num_cpu_states): (*mut POETCpuState, u32) = POETCpuState::new().ok().expect("Failed to load cpu states");
-    if num_ctl_states != num_cpu_states {
-        panic!("Number of control and cpu states don't match");
+#[cfg(test)]
+mod test {
+    use super::*;
+    use libc::{self, c_void};
+    use heartbeats_sys::heartbeat::Heartbeat;
+
+
+    #[test]
+    fn test_basic() {
+        let mut hb = Heartbeat::new(None, 20, 20, "heartbeat.log", None).unwrap();
+        let (control_states, num_ctl_states): (*mut POETControlState, u32) = POETControlState::new().ok().expect("Failed to load control states");
+        let (cpu_states, num_cpu_states): (*mut POETCpuState, u32) = POETCpuState::new().ok().expect("Failed to load cpu states");
+        if num_ctl_states != num_cpu_states {
+            panic!("Number of control and cpu states don't match");
+        }
+        let mut poet = POET::new(&mut hb, 100.0,
+                                 control_states, cpu_states, num_ctl_states,
+                                 None, None,
+                                 20u32, "poet.log").ok().expect("Failed to initialize POET");
+        hb.heartbeat(0, 1, 0.0, None);
+        poet.apply_control();
+        unsafe {
+            libc::free(control_states as *mut c_void);
+            libc::free(cpu_states as *mut c_void);
+        }
     }
-    let mut poet = POET::new(&mut hb, 100.0,
-                             control_states, cpu_states, num_ctl_states,
-                             None, None,
-                             20u32, "poet.log").ok().expect("Failed to initialize POET");
-    hb.heartbeat(0, 1, 0.0, None);
-    poet.apply_control();
-    unsafe {
-        libc::free(control_states as *mut c_void);
-        libc::free(cpu_states as *mut c_void);
-    }
+
 }
