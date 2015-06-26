@@ -80,6 +80,16 @@ impl POETControlState {
     }
 }
 
+impl Default for POETControlState {
+    fn default() -> POETControlState {
+        POETControlState {
+            id: 0,
+            speedup: 1.0,
+            cost: 1.0,
+        }
+    }
+}
+
 #[repr(C)]
 pub struct POETCpuState {
     id: c_uint,
@@ -100,6 +110,16 @@ impl POETCpuState {
             return Err("Failed to load cpu states".to_string());
         }
         Ok((cpu_states, num_cpu_states))
+    }
+}
+
+impl Default for POETCpuState {
+    fn default() -> POETCpuState {
+        POETCpuState {
+            id: 0,
+            freq: 0,
+            cores: 0,
+        }
     }
 }
 
@@ -160,24 +180,47 @@ impl Drop for POET {
 #[cfg(test)]
 mod test {
     use super::*;
-    use libc::{self, c_void};
+    use libc::{c_void, c_uint};
 
     #[test]
     fn test_basic() {
-        let (control_states, num_ctl_states): (*mut POETControlState, u32) = POETControlState::new().ok().expect("Failed to load control states");
-        let (cpu_states, num_cpu_states): (*mut POETCpuState, u32) = POETCpuState::new().ok().expect("Failed to load cpu states");
-        if num_ctl_states != num_cpu_states {
-            panic!("Number of control and cpu states don't match");
-        }
+        let mut control_states = vec![POETControlState::default()];
+        let mut cpu_states = vec![POETCpuState::default()];
         let mut poet = POET::new(100.0,
-                                 control_states, cpu_states, num_ctl_states,
+                                 control_states.as_mut_ptr(), cpu_states.as_mut_ptr(), 1,
                                  None, None,
                                  20u32, 1u32, None).unwrap();
         poet.apply_control(0, 1.0, 1.0);
-        unsafe {
-            libc::free(control_states as *mut c_void);
-            libc::free(cpu_states as *mut c_void);
+    }
+
+    #[test]
+    fn test_rust_callbacks() {
+        let mut control_states = vec![POETControlState::default()];
+        let mut cpu_states = vec![POETCpuState::default()];
+        let mut poet = POET::new(100.0,
+                                 control_states.as_mut_ptr(), cpu_states.as_mut_ptr(), 1,
+                                 Some(dummy_apply), Some(dummy_curr_state),
+                                 20u32, 1u32, None).unwrap();
+        for i in 0..50 {
+            poet.apply_control(i, 1.0, 1.0);
         }
+    }
+
+    unsafe extern fn dummy_apply(_states: *mut c_void,
+                                 _num_states: c_uint,
+                                 _id: c_uint,
+                                 _last_id: c_uint) {
+        // do nothing
+        println!("Received apply call");
+    }
+
+    unsafe extern fn dummy_curr_state (_states: *const c_void,
+                                       _num_states: c_uint,
+                                       _curr_state_id: *mut c_uint) -> i32 {
+        println!("Received curr state call");
+        // this is actually an invalid value, but forces the apply function to be called
+        *_curr_state_id = _num_states;
+        0
     }
 
 }
