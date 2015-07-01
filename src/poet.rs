@@ -64,6 +64,12 @@ extern {
 
 }
 
+fn add_null_terminator(f: &str) -> CString {
+    let mut ntf: String = f.to_string();
+    ntf.push('\0');
+    CString::new(&ntf[..]).unwrap()
+}
+
 #[repr(C)]
 #[derive(Copy, Clone)]
 /// Representation of native struct `poet_control_state_t`.
@@ -77,7 +83,7 @@ impl POETControlState {
     /// Attempt to load control states from a file.
     pub fn new(filename: Option<&str>) -> Result<Vec<POETControlState>, &'static str> {
         let filename = match filename {
-            Some(f) => CString::new(f).unwrap().as_ptr(),
+            Some(f) => add_null_terminator(f).as_ptr(),
             None => ptr::null(),
         };
         let mut states: *mut POETControlState = ptr::null_mut::<POETControlState>();
@@ -122,7 +128,7 @@ impl POETCpuState {
     /// Attempt to load cpu states from a file.
     pub fn new(filename: Option<&str>) -> Result<Vec<POETCpuState>, &'static str> {
         let filename = match filename {
-            Some(f) => CString::new(f).unwrap().as_ptr(),
+            Some(f) => add_null_terminator(f).as_ptr(),
             None => ptr::null(),
         };
         let mut states: *mut POETCpuState = ptr::null_mut::<POETCpuState>();
@@ -182,7 +188,7 @@ impl POET {
             None => get_current_cpu_state,
         };
         let log_filename = match log_filename {
-            Some(l) => CString::new(l).unwrap().as_ptr(),
+            Some(l) => add_null_terminator(l.as_ptr(),
             None => ptr::null(),
         };
         let poet = unsafe {
@@ -225,6 +231,17 @@ mod test {
     fn test_basic() {
         let mut control_states = vec![POETControlState::default()];
         let mut cpu_states = vec![POETCpuState::default()];
+        let mut poet = POET::new(100.0,
+                                 &mut control_states, &mut cpu_states,
+                                 None, None,
+                                 20u32, 1u32, None).unwrap();
+        poet.apply_control(0, 1.0, 1.0);
+    }
+
+    #[test]
+    fn test_control_cpu_files_with_log() {
+        let mut control_states = POETControlState::new(Some("test/control_config")).unwrap();
+        let mut cpu_states = POETCpuState::new(Some("test/cpu_config")).unwrap();
         let mut poet = POET::new(100.0,
                                  &mut control_states, &mut cpu_states,
                                  None, None,
