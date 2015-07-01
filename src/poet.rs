@@ -64,6 +64,7 @@ extern {
 }
 
 #[repr(C)]
+#[derive(Copy, Clone)]
 /// Representation of native struct `poet_control_state_t`.
 pub struct POETControlState {
     pub id: c_uint,
@@ -73,22 +74,23 @@ pub struct POETControlState {
 
 impl POETControlState {
     /// Attempt to load control states from a file.
-    pub fn new(filename: Option<&str>) -> Result<(*mut POETControlState, u32), &'static str> {
+    pub fn new(filename: Option<&str>) -> Result<Vec<POETControlState>, &'static str> {
         let filename = match filename {
             Some(f) => CString::new(f).unwrap().as_ptr(),
             None => ptr::null(),
         };
-        let mut control_states = ptr::null_mut();
-        let mut num_ctl_states : u32 = 0;
-        let res = unsafe {
-            get_control_states(filename,
-                               &mut control_states,
-                               &mut num_ctl_states)
-        };
-        if res != 0 {
-            return Err("Failed to load control states");
+        let mut states: *mut POETControlState = ptr::null_mut::<POETControlState>();
+        unsafe {
+            let mut nstates: u32 = 0;
+            let res = get_control_states(filename,
+                                         &mut states,
+                                         &mut nstates);
+            if res != 0 {
+                return Err("Failed to load control states");
+            }
+            let csvec: Vec<POETControlState> = Vec::from_raw_parts(states, nstates as usize, nstates as usize);
+            Ok(csvec)
         }
-        Ok((control_states, num_ctl_states))
     }
 }
 
@@ -103,6 +105,7 @@ impl Default for POETControlState {
 }
 
 #[repr(C)]
+#[derive(Copy, Clone)]
 /// Representation of native struct `poet_cpu_state_t`.
 pub struct POETCpuState {
     id: c_uint,
@@ -112,22 +115,23 @@ pub struct POETCpuState {
 
 impl POETCpuState {
     /// Attempt to load cpu states from a file.
-    pub fn new(filename: Option<&str>) -> Result<(*mut POETCpuState, u32), &'static str> {
+    pub fn new(filename: Option<&str>) -> Result<Vec<POETCpuState>, &'static str> {
         let filename = match filename {
             Some(f) => CString::new(f).unwrap().as_ptr(),
             None => ptr::null(),
         };
-        let mut cpu_states = ptr::null_mut();
-        let mut num_cpu_states : u32 = 0;
-        let res = unsafe {
-            get_cpu_states(filename,
-                           &mut cpu_states,
-                           &mut num_cpu_states)
-        };
-        if res != 0 {
-            return Err("Failed to load cpu states");
+        let mut states: *mut POETCpuState = ptr::null_mut::<POETCpuState>();
+        unsafe {
+            let mut nstates: u32 = 0;
+            let res = get_cpu_states(filename,
+                                     &mut states,
+                                     &mut nstates);
+            if res != 0 {
+                return Err("Failed to load cpu states");
+            }
+            let csvec: Vec<POETCpuState> = Vec::from_raw_parts(states, nstates as usize, nstates as usize);
+            Ok(csvec)
         }
-        Ok((cpu_states, num_cpu_states))
     }
 }
 
@@ -150,14 +154,16 @@ pub struct POET {
 impl POET {
     /// Attempt to initialize POET and allocate resources in the underlying C struct.
     pub fn new(perf_goal: f64,
-               control_states: *mut POETControlState,
-               cpu_states: *mut POETCpuState,
-               num_states: u32,
+               control_states: &mut Vec<POETControlState>,
+               cpu_states: &mut Vec<POETCpuState>,
                apply_func: Option<POETApplyFn>,
                curr_state_func: Option<POETCurrentStateFn>,
                period: u32,
                buffer_depth: u32,
                log_filename: Option<&str>) -> Result<POET, &'static str> {
+        if control_states.len() != cpu_states.len() {
+            return Err("Number of control and cpu states don't match");
+        }
         let apply_func = match apply_func {
             Some(p) => p,
             None => apply_cpu_config,
@@ -171,8 +177,9 @@ impl POET {
             None => ptr::null(),
         };
         let poet = unsafe {
+            let num_states = control_states.len() as u32;
             poet_init(perf_goal,
-                      num_states, control_states, cpu_states,
+                      num_states, control_states.as_mut_ptr(), cpu_states.as_mut_ptr(),
                       apply_func, curr_state_func,
                       period, buffer_depth, log_filename)
         };
@@ -197,7 +204,6 @@ impl Drop for POET {
         unsafe {
             poet_destroy(self.poet);
         }
-        println!("Cleaned up POET");
     }
 }
 
@@ -211,9 +217,9 @@ mod test {
         let mut control_states = vec![POETControlState::default()];
         let mut cpu_states = vec![POETCpuState::default()];
         let mut poet = POET::new(100.0,
-                                 control_states.as_mut_ptr(), cpu_states.as_mut_ptr(), 1,
+                                 &mut control_states, &mut cpu_states,
                                  None, None,
-                                 20u32, 1u32, None).unwrap();
+                                 20u32, 1u32, Some("poet.log")).unwrap();
         poet.apply_control(0, 1.0, 1.0);
     }
 
@@ -222,7 +228,7 @@ mod test {
         let mut control_states = vec![POETControlState::default()];
         let mut cpu_states = vec![POETCpuState::default()];
         let mut poet = POET::new(100.0,
-                                 control_states.as_mut_ptr(), cpu_states.as_mut_ptr(), 1,
+                                 &mut control_states, &mut cpu_states,
                                  Some(dummy_apply), Some(dummy_curr_state),
                                  20u32, 1u32, None).unwrap();
         for i in 0..50 {
