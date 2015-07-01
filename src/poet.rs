@@ -1,9 +1,10 @@
 //! POET - the Performance with Optimal Energy Toolkit. Used to meet timing constraints while
 //! minimizing energy consumption.
 
-use libc::{c_void, c_char, c_int, c_uint, c_double};
+use libc::{self, c_void, c_char, c_int, c_uint, c_double};
 use std::ffi::CString;
 use std::ptr;
+use std::mem;
 
 /// Typedef for an "apply" function - used to manipulate system or application settings.
 pub type POETApplyFn = unsafe extern fn(states: *mut c_void,
@@ -89,7 +90,11 @@ impl POETControlState {
                 return Err("Failed to load control states");
             }
             let csvec: Vec<POETControlState> = Vec::from_raw_parts(states, nstates as usize, nstates as usize);
-            Ok(csvec)
+            // clone so we can free C-allocated memory (so user doesn't have to)
+            let ret = csvec.clone();
+            mem::forget(csvec);
+            libc::free(states as *mut c_void);
+            Ok(ret)
         }
     }
 }
@@ -130,7 +135,11 @@ impl POETCpuState {
                 return Err("Failed to load cpu states");
             }
             let csvec: Vec<POETCpuState> = Vec::from_raw_parts(states, nstates as usize, nstates as usize);
-            Ok(csvec)
+            // clone so we can free C-allocated memory (so user doesn't have to)
+            let ret = csvec.clone();
+            mem::forget(csvec);
+            libc::free(states as *mut c_void);
+            Ok(ret)
         }
     }
 }
