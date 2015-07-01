@@ -73,7 +73,7 @@ pub struct POETControlState {
 
 impl POETControlState {
     /// Attempt to load control states from a file.
-    pub fn new(filename: Option<&str>) -> Result<(*mut POETControlState, u32), String> {
+    pub fn new(filename: Option<&str>) -> Result<(*mut POETControlState, u32), &'static str> {
         let filename = match filename {
             Some(f) => CString::new(f).unwrap().as_ptr(),
             None => ptr::null(),
@@ -86,7 +86,7 @@ impl POETControlState {
                                &mut num_ctl_states)
         };
         if res != 0 {
-            return Err("Failed to load control states".to_string());
+            return Err("Failed to load control states");
         }
         Ok((control_states, num_ctl_states))
     }
@@ -112,7 +112,7 @@ pub struct POETCpuState {
 
 impl POETCpuState {
     /// Attempt to load cpu states from a file.
-    pub fn new(filename: Option<&str>) -> Result<(*mut POETCpuState, u32), String> {
+    pub fn new(filename: Option<&str>) -> Result<(*mut POETCpuState, u32), &'static str> {
         let filename = match filename {
             Some(f) => CString::new(f).unwrap().as_ptr(),
             None => ptr::null(),
@@ -125,7 +125,7 @@ impl POETCpuState {
                            &mut num_cpu_states)
         };
         if res != 0 {
-            return Err("Failed to load cpu states".to_string());
+            return Err("Failed to load cpu states");
         }
         Ok((cpu_states, num_cpu_states))
     }
@@ -157,7 +157,7 @@ impl POET {
                curr_state_func: Option<POETCurrentStateFn>,
                period: u32,
                buffer_depth: u32,
-               log_filename: Option<&str>) -> Result<POET, String> {
+               log_filename: Option<&str>) -> Result<POET, &'static str> {
         let apply_func = match apply_func {
             Some(p) => p,
             None => apply_cpu_config,
@@ -177,7 +177,7 @@ impl POET {
                       period, buffer_depth, log_filename)
         };
         if poet.is_null() {
-            return Err("Failed to instantiate POET object".to_string());
+            return Err("Failed to instantiate POET object");
         }
         Ok(POET { poet: poet, })
     }
