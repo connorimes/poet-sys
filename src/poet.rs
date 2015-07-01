@@ -188,7 +188,7 @@ impl POET {
             None => get_current_cpu_state,
         };
         let log_filename = match log_filename {
-            Some(l) => add_null_terminator(l.as_ptr(),
+            Some(l) => add_null_terminator(l).as_ptr(),
             None => ptr::null(),
         };
         let poet = unsafe {
