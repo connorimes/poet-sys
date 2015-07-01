@@ -1,12 +1,18 @@
+//! POET - the Performance with Optimal Energy Toolkit. Used to meet timing constraints while
+//! minimizing energy consumption.
+
 use libc::{c_void, c_char, c_int, c_uint, c_double};
 use std::ffi::CString;
 use std::ptr;
 
+/// Typedef for an "apply" function - used to manipulate system or application settings.
 pub type POETApplyFn = unsafe extern fn(states: *mut c_void,
                                         num_states: c_uint,
                                         id: c_uint,
                                         last_id: c_uint);
 
+/// Typedef for "current state" function - used to try and determine the current system or
+/// application state.
 pub type POETCurrentStateFn = unsafe extern fn(states: *const c_void,
                                                num_states: c_uint,
                                                curr_state_id: *mut c_uint) -> i32;
@@ -43,13 +49,13 @@ extern {
                         id: c_uint,
                         last_id: c_uint);
     
-    pub fn get_control_states(path: *const c_char,
-                              states: *mut *mut POETControlState,
-                              num_states: *mut c_uint) -> c_int;
-
-    pub fn get_cpu_states(path: *const c_char,
-                          states: *mut *mut POETCpuState,
+    fn get_control_states(path: *const c_char,
+                          states: *mut *mut POETControlState,
                           num_states: *mut c_uint) -> c_int;
+
+    fn get_cpu_states(path: *const c_char,
+                      states: *mut *mut POETCpuState,
+                      num_states: *mut c_uint) -> c_int;
 
     fn get_current_cpu_state(states: *const c_void,
                              num_states: c_uint,
@@ -58,6 +64,7 @@ extern {
 }
 
 #[repr(C)]
+/// Representation of native struct `poet_control_state_t`.
 pub struct POETControlState {
     pub id: c_uint,
     pub speedup: c_double,
@@ -65,11 +72,16 @@ pub struct POETControlState {
 }
 
 impl POETControlState {
-    pub fn new() -> Result<(*mut POETControlState, u32), String> {
+    /// Attempt to load control states from a file.
+    pub fn new(filename: Option<&str>) -> Result<(*mut POETControlState, u32), String> {
+        let filename = match filename {
+            Some(f) => CString::new(f).unwrap().as_ptr(),
+            None => ptr::null(),
+        };
         let mut control_states = ptr::null_mut();
         let mut num_ctl_states : u32 = 0;
         let res = unsafe {
-            get_control_states(ptr::null(),
+            get_control_states(filename,
                                &mut control_states,
                                &mut num_ctl_states)
         };
@@ -91,6 +103,7 @@ impl Default for POETControlState {
 }
 
 #[repr(C)]
+/// Representation of native struct `poet_cpu_state_t`.
 pub struct POETCpuState {
     id: c_uint,
     freq: c_uint,
@@ -98,11 +111,16 @@ pub struct POETCpuState {
 }
 
 impl POETCpuState {
-    pub fn new() -> Result<(*mut POETCpuState, u32), String> {
+    /// Attempt to load cpu states from a file.
+    pub fn new(filename: Option<&str>) -> Result<(*mut POETCpuState, u32), String> {
+        let filename = match filename {
+            Some(f) => CString::new(f).unwrap().as_ptr(),
+            None => ptr::null(),
+        };
         let mut cpu_states = ptr::null_mut();
         let mut num_cpu_states : u32 = 0;
         let res = unsafe {
-            get_cpu_states(ptr::null(),
+            get_cpu_states(filename,
                            &mut cpu_states,
                            &mut num_cpu_states)
         };
@@ -123,11 +141,14 @@ impl Default for POETCpuState {
     }
 }
 
+/// The `POET` struct wraps an underyling C struct.
 pub struct POET {
+    /// The underlying C struct `poet_state`.
     pub poet: *mut c_void,
 }
 
 impl POET {
+    /// Attempt to initialize POET and allocate resources in the underlying C struct.
     pub fn new(perf_goal: f64,
                control_states: *mut POETControlState,
                cpu_states: *mut POETCpuState,
@@ -161,6 +182,8 @@ impl POET {
         Ok(POET { poet: poet, })
     }
 
+    /// Call at every iteration - at specified periods this function will (potentially) order
+    /// changes to system or application state to try and meet timing constraints.
     pub fn apply_control(&mut self, tag: u64, window_rate: f64, window_power: f64) {
         unsafe {
             poet_apply_control(self.poet, tag, window_rate, window_power);
@@ -169,6 +192,7 @@ impl POET {
 }
 
 impl Drop for POET {
+    /// Cleanup POET and deallocate resources in the underlying C struct.
     fn drop(&mut self) {
         unsafe {
             poet_destroy(self.poet);
