@@ -64,12 +64,6 @@ extern {
 
 }
 
-fn add_null_terminator(f: &str) -> CString {
-    let mut ntf: String = f.to_string();
-    ntf.push('\0');
-    CString::new(&ntf[..]).unwrap()
-}
-
 #[repr(C)]
 #[derive(Copy, Clone)]
 /// Representation of native struct `poet_control_state_t`.
@@ -81,15 +75,15 @@ pub struct POETControlState {
 
 impl POETControlState {
     /// Attempt to load control states from a file.
-    pub fn new(filename: Option<&str>) -> Result<Vec<POETControlState>, &'static str> {
-        let filename = match filename {
-            Some(f) => add_null_terminator(f).as_ptr(),
+    pub fn new(filename: Option<&CString>) -> Result<Vec<POETControlState>, &'static str> {
+        let name_ptr = match filename {
+            Some(f) => f.as_ptr(),
             None => ptr::null(),
         };
         let mut states: *mut POETControlState = ptr::null_mut::<POETControlState>();
         unsafe {
             let mut nstates: u32 = 0;
-            let res = get_control_states(filename,
+            let res = get_control_states(name_ptr,
                                          &mut states,
                                          &mut nstates);
             if res != 0 {
@@ -126,15 +120,15 @@ pub struct POETCpuState {
 
 impl POETCpuState {
     /// Attempt to load cpu states from a file.
-    pub fn new(filename: Option<&str>) -> Result<Vec<POETCpuState>, &'static str> {
-        let filename = match filename {
-            Some(f) => add_null_terminator(f).as_ptr(),
+    pub fn new(filename: Option<&CString>) -> Result<Vec<POETCpuState>, &'static str> {
+        let name_ptr = match filename {
+            Some(f) => f.as_ptr(),
             None => ptr::null(),
         };
         let mut states: *mut POETCpuState = ptr::null_mut::<POETCpuState>();
         unsafe {
             let mut nstates: u32 = 0;
-            let res = get_cpu_states(filename,
+            let res = get_cpu_states(name_ptr,
                                      &mut states,
                                      &mut nstates);
             if res != 0 {
@@ -175,7 +169,7 @@ impl POET {
                curr_state_func: Option<POETCurrentStateFn>,
                period: u32,
                buffer_depth: u32,
-               log_filename: Option<&str>) -> Result<POET, &'static str> {
+               log_filename: Option<&CString>) -> Result<POET, &'static str> {
         if control_states.len() != cpu_states.len() {
             return Err("Number of control and cpu states don't match");
         }
@@ -187,8 +181,8 @@ impl POET {
             Some(p) => p,
             None => get_current_cpu_state,
         };
-        let log_filename = match log_filename {
-            Some(l) => add_null_terminator(l).as_ptr(),
+        let log_ptr = match log_filename {
+            Some(l) => l.as_ptr(),
             None => ptr::null(),
         };
         let poet = unsafe {
@@ -196,7 +190,7 @@ impl POET {
             poet_init(perf_goal,
                       num_states, control_states.as_mut_ptr(), cpu_states.as_mut_ptr(),
                       apply_func, curr_state_func,
-                      period, buffer_depth, log_filename)
+                      period, buffer_depth, log_ptr)
         };
         if poet.is_null() {
             return Err("Failed to instantiate POET object");
@@ -226,6 +220,7 @@ impl Drop for POET {
 mod test {
     use super::*;
     use libc::{c_void, c_uint};
+    use std::ffi::CString;
 
     #[test]
     fn test_basic() {
@@ -240,12 +235,12 @@ mod test {
 
     #[test]
     fn test_control_cpu_files_with_log() {
-        let mut control_states = POETControlState::new(Some("test/control_config")).unwrap();
-        let mut cpu_states = POETCpuState::new(Some("test/cpu_config")).unwrap();
+        let mut control_states = POETControlState::new(Some(&CString::new("test/control_config").unwrap())).unwrap();
+        let mut cpu_states = POETCpuState::new(Some(&CString::new("test/cpu_config").unwrap())).unwrap();
         let mut poet = POET::new(100.0,
                                  &mut control_states, &mut cpu_states,
                                  None, None,
-                                 20u32, 1u32, Some("poet.log")).unwrap();
+                                 20u32, 1u32, Some(&CString::new("poet.log").unwrap())).unwrap();
         poet.apply_control(0, 1.0, 1.0);
     }
 
