@@ -7,16 +7,16 @@ use std::ptr;
 use std::mem;
 
 /// Typedef for an "apply" function - used to manipulate system or application settings.
-pub type POETApplyFn = unsafe extern fn(states: *mut c_void,
-                                        num_states: c_uint,
-                                        id: c_uint,
-                                        last_id: c_uint);
+pub type POETApplyFn = extern fn(states: *mut c_void,
+                                 num_states: c_uint,
+                                 id: c_uint,
+                                 last_id: c_uint);
 
 /// Typedef for "current state" function - used to try and determine the current system or
 /// application state.
-pub type POETCurrentStateFn = unsafe extern fn(states: *const c_void,
-                                               num_states: c_uint,
-                                               curr_state_id: *mut c_uint) -> i32;
+pub type POETCurrentStateFn = extern fn(states: *const c_void,
+                                        num_states: c_uint,
+                                        curr_state_id: *mut c_uint) -> i32;
 
 #[link(name = "poet")]
 extern {
@@ -62,6 +62,23 @@ extern {
                              num_states: c_uint,
                              curr_state_id: *mut c_uint) -> c_int;
 
+}
+
+extern fn apply_cpu_config_wrapper(states: *mut c_void,
+                                   num_states: c_uint,
+                                   id: c_uint,
+                                   last_id: c_uint) {
+    unsafe {
+        apply_cpu_config(states, num_states, id, last_id)
+    }
+}
+
+extern fn get_current_cpu_state_wrapper(states: *const c_void,
+                                        num_states: c_uint,
+                                        curr_state_id: *mut c_uint) -> c_int {
+    unsafe {
+        get_current_cpu_state(states, num_states, curr_state_id)
+    }
 }
 
 #[repr(C)]
@@ -173,13 +190,16 @@ impl POET {
         if control_states.len() != cpu_states.len() {
             return Err("Number of control and cpu states don't match");
         }
+        // the following necessary cast for None seem to be a bug in Rust coercion
         let apply_func = match apply_func {
             Some(p) => p,
-            None => apply_cpu_config,
+            None => apply_cpu_config_wrapper
+                    as extern "C" fn(*mut libc::types::common::c95::c_void, u32, u32, u32),
         };
         let curr_state_func = match curr_state_func {
             Some(p) => p,
-            None => get_current_cpu_state,
+            None => get_current_cpu_state_wrapper
+                    as extern "C" fn(*const libc::types::common::c95::c_void, u32, *mut u32) -> i32,
         };
         let log_ptr = match log_filename {
             Some(l) => l.as_ptr(),
@@ -257,20 +277,22 @@ mod test {
         }
     }
 
-    unsafe extern fn dummy_apply(_states: *mut c_void,
-                                 _num_states: c_uint,
-                                 _id: c_uint,
-                                 _last_id: c_uint) {
+    extern fn dummy_apply(_states: *mut c_void,
+                          _num_states: c_uint,
+                          _id: c_uint,
+                          _last_id: c_uint) {
         // do nothing
         println!("Received apply call");
     }
 
-    unsafe extern fn dummy_curr_state (_states: *const c_void,
-                                       _num_states: c_uint,
-                                       _curr_state_id: *mut c_uint) -> i32 {
+    extern fn dummy_curr_state(_states: *const c_void,
+                               _num_states: c_uint,
+                               _curr_state_id: *mut c_uint) -> i32 {
         println!("Received curr state call");
-        // this is actually an invalid value, but forces the apply function to be called
-        *_curr_state_id = _num_states;
+        unsafe {
+            // this is actually an invalid value, but forces the apply function to be called
+            *_curr_state_id = _num_states;
+        }
         0
     }
 
