@@ -1,5 +1,5 @@
 [package]
-name = "poet-sys"
+name = "poet_sys"
 version = "0.1.0"
 authors = ["Connor Imes <cimes@mozilla.com>"]
 
