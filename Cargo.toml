@@ -1,7 +1,14 @@
 [package]
-name = "poet_sys"
+name = "poet-sys"
 version = "0.1.0"
-authors = ["Connor Imes <cimes@mozilla.com>"]
+authors = ["Connor Imes <connor.k.imes@gmail.com>"]
+description = "FFI bindings to libpoet"
+homepage = "https://github.com/connorimes/poet-sys"
+repository = "https://github.com/connorimes/poet-sys"
+keywords = ["poet", "performance", "optimal", "energy", "toolkit", "feedback", "control", "bindings"]
+
+build = "build.rs"
+links = "poet"
 
 [dependencies]
 libc = "0.1"

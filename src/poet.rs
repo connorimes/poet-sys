@@ -18,7 +18,6 @@ pub type POETCurrentStateFn = extern fn(states: *const c_void,
                                         num_states: c_uint,
                                         curr_state_id: *mut c_uint) -> i32;
 
-#[link(name = "poet")]
 extern {
     /*
      * Core functions - poet.h
