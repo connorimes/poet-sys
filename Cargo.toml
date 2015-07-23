@@ -9,7 +9,6 @@ repository = "https://github.com/connorimes/poet-sys"
 keywords = ["poet", "performance", "optimal", "energy", "toolkit", "feedback", "control", "bindings"]
 
 build = "build.rs"
-links = "poet"
 
 [dependencies]
 libc = "0.1"
