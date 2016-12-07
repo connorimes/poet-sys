@@ -32,8 +32,8 @@ pub struct poet_cpu_state_t {
     pub cores: c_uint,
 }
 
-#[repr(C)]
-pub struct poet_state;
+/// Representation of the opaque native struct `poet_state`.
+pub enum poet_state {}
 
 extern {
 
