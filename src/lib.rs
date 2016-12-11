@@ -5,16 +5,16 @@ extern crate libc;
 use libc::{c_void, c_char, c_int, c_uint, c_double};
 
 /// Typedef for an "apply" function - used to manipulate system or application settings.
-pub type poet_apply_func = extern fn(states: *mut c_void,
-                                     num_states: c_uint,
-                                     id: c_uint,
-                                     last_id: c_uint);
+pub type poet_apply_func = Option<extern "C" fn(states: *mut c_void,
+                                                num_states: c_uint,
+                                                id: c_uint,
+                                                last_id: c_uint)>;
 
 /// Typedef for "current state" function - used to try and determine the current system or
 /// application state.
-pub type poet_curr_state_func = extern fn(states: *const c_void,
-                                          num_states: c_uint,
-                                          curr_state_id: *mut c_uint) -> i32;
+pub type poet_curr_state_func = Option<extern "C" fn(states: *const c_void,
+                                                     num_states: c_uint,
+                                                     curr_state_id: *mut c_uint) -> i32>;
 
 #[repr(C)]
 /// Representation of native struct `poet_control_state_t`.
