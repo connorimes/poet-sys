@@ -54,6 +54,9 @@ extern {
                               perf: c_double,
                               pwr: c_double);
 
+    pub fn poet_set_performance_goal(state: *mut poet_state,
+                                     perf_goal: c_double);
+
     pub fn poet_destroy(state: *mut poet_state);
 
     // Configuration/utility functions - poet_config.h
